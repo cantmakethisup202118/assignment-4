@@ -158,12 +158,35 @@ window.updateProjection = function() {
 */
 
 function createBuilding(centerX, centerY, size, height, curIndex) {
+    var halfSize = size/2; 
 
-    var coordinates = []
-    var indices = [];
+    var coordinates = [
+        // Bottom face
+        centerX - halfSize, centerY - halfSize, 0,
+        centerX + halfSize, centerY - halfSize, 0,
+        centerX + halfSize, centerY + halfSize, 0,
+        centerX - halfSize, centerY + halfSize, 0,
+        // Top face
+        centerX - halfSize, centerY - halfSize, height,
+        centerX + halfSize, centerY - halfSize, height,
+        centerX + halfSize, centerY + halfSize, height,
+        centerX - halfSize, centerY + halfSize, height
+    ];
+    var indices = [
+        // Bottom face
+        0, 1, 2, 0, 2, 3,
+        // Top face
+        4, 5, 6, 4, 6, 7,
+        // Side faces
+        0, 4, 5, 0, 5, 1,
+        1, 5, 6, 1, 6, 2,
+        2, 6, 7, 2, 7, 3,
+        3, 7, 4, 3, 4, 0
+    ];
     var normals = [];
 
     // TODO create faces of the building taking into account center point, size and height
+
 
     return {'coordinates': coordinates, 'indices': indices, 'normals': normals};
 
@@ -177,12 +200,33 @@ function buildGeometries(imgArray, width, height) {
 
     // TODO loop through array and create building geometry according to red channel value
     var maxHeight = 500;
-    var cellsize = 100;
-    var buildingsize = 75;
+    var cellSize = 100;
+    var buildingSize = 75;
     var curIndex = 0;
     
+    for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+            const idx = (x + y * width) * 4; // Assuming RGBA
+            const redValue = imgArray[idx]; // Red channel for height
+            const buildingHeight = (redValue / 255.0) * maxHeight;
+
+            const centerX = (x - width / 2) * cellSize;
+            const centerY = (y - height / 2) * cellSize;
+
+            const building = createBuilding(centerX, centerY, buildingSize, buildingHeight);
+
+            const updatedIndices = building.indices.map(index => index + curIndex);
+
+            geometries.buildings.coordinates.push(...building.coordinates);
+            geometries.buildings.indices.push(...building.indices.map(i => i + geometries.buildings.coordinates.length / 3));
+            geometries.buildings.normals.push(...building.normals);
+
+            curIndex += building.coordinates.length / 3; // Increment by the number of vertices added
+        }
+    }
+
     // Surface
-    geometries['surface']['coordinates'] = [-width*cellsize/2.0,-height*cellsize/2.0,0,  width*cellsize/2.0,-height*cellsize/2.0,0, width*cellsize/2.0,height*cellsize/2.0,0, -width*cellsize/2.0,height*cellsize/2.0,0 ];
+    geometries['surface']['coordinates'] = [-width*cellSize/2.0,-height*cellSize/2.0,0,  width*cellSize/2.0,-height*cellSize/2.0,0, width*cellSize/2.0,height*cellSize/2.0,0, -width*cellSize/2.0,height*cellSize/2.0,0 ];
     geometries['surface']['indices'] = [0, 1, 2, 0, 2, 3];
 
     return geometries;
@@ -191,12 +235,17 @@ function buildGeometries(imgArray, width, height) {
 window.handleFile = function(e) {
     var img = new Image();
     img.onload = function() {
+        console.log("Image loaded successfully.");
         var context = document.getElementById('image').getContext('2d');
         context.drawImage(img, 0, 0);
         var data = context.getImageData(0, 0, img.width, img.height).data;
+        console.log("Image data extracted:", data);
         var geometries = buildGeometries(data, img.width, img.height);
         layers.addLayer('surface', geometries['surface']['coordinates'], geometries['surface']['indices'], geometries['surface']['color']);
         layers.addLayer('buildings', geometries['buildings']['coordinates'], geometries['buildings']['indices'], geometries['buildings']['color'], geometries['buildings']['normals']);
+    };
+    img.onerror = function() {
+        console.error("Error loading the image.");
     };
     img.src = URL.createObjectURL(e.files[0]);
 }
